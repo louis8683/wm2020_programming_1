@@ -1,4 +1,6 @@
 import math
+import os
+import pathlib
 import numpy
 import read_model
 
@@ -36,6 +38,7 @@ if __name__ == "__main__":
     # read_model.pickle_models(vocab, docs, (inverted_file_terms, inverted_file_postings), "./model/models.pickle")
     '''
 
+
     '''
     start_time = time.time()
     vocab, docs, inverted_file = read_model.load_models_from_pickle("./model/models.pickle")
@@ -51,13 +54,33 @@ if __name__ == "__main__":
     # TF-IDF: w = tf * idf
 
     
-    def idf(df, N, base=10):
-        return math.log(N/df, base)
+    def idf(df, N):
+        return math.log(N/df)
     
 
     def tf_idf(tf, idf):
         return tf * idf
     
+
+    def okapi_tf(cnt, k=100):
+        return (k+1) * cnt / (cnt + k)
+    
+    
+    def okapi_doclen_norm(posting_id, avdl, b=0.8):
+        filename = docs[posting_id]
+        path = str(pathlib.Path().absolute())+'/CIRB010/'+filename
+        doclen = os.path.getsize(path)
+        return 1-b+b*doclen/avdl
+
+
+    def get_avg_doclen(postings):
+        sum = 0
+        for posting in postings:
+            filename = docs[posting]
+            path = str(pathlib.Path().absolute())+'/CIRB010/'+filename
+            sum += os.path.getsize(path)
+        return sum/len(postings)
+
 
     doc_cnt = len(docs)
 
@@ -156,7 +179,7 @@ if __name__ == "__main__":
             # print(len(terms_id), len(inverted_file_term_indexes), len(inverted_file_postings))
             postings = inverted_file_postings[inverted_file_term_indexes[i]]
             for posting in postings:
-                mat[i][merged_postings.index(posting[0])] = tf_idf(posting[1], idf(len(postings), doc_cnt, base=10))
+                mat[i][merged_postings.index(posting[0])] = tf_idf(okapi_tf(posting[1])/okapi_doclen_norm(posting[0], avdl), idf(len(postings), doc_cnt))
 
 
     def write_rank(f, query_number, docs):
@@ -219,7 +242,10 @@ if __name__ == "__main__":
         VS = zeroed_matrix(len(terms_id), len(merged_postings))
         print(f"VS Dimensions: {len(VS)}, {len(VS[0])}")
 
+        avdl = get_avg_doclen(merged_postings)
+        print('avdl:', avdl)
         fill_matrix(VS, inverted_indexes, merged_postings, inverted_file_postings)
+        #print(VS)
         
         '''
         Searching

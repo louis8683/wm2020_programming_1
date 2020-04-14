@@ -66,7 +66,7 @@ if __name__ == "__main__":
         invf_indexes_t = qp.terms_id_to_inverted_file_index(invf_terms, terms_id_t)
         invf_indexes_c = qp.terms_id_to_inverted_file_index(invf_terms, terms_id_c)
         print(f'done. ({time.time()-start_time}sec)')
-        
+
 
         '''
         VSM
@@ -79,10 +79,8 @@ if __name__ == "__main__":
         '''
 
         start_time = time.time()
-        print('Merging Postings...', end='', flush=True)
         invf_indexes = list(set(invf_indexes_t + invf_indexes_c))
         merged_postings = vsm.get_merged_postings_list(invf_postings, invf_indexes)
-        print(f'done. ({time.time()-start_time}sec)')
 
         start_time = time.time()
         print('Creating empty VS...', end='', flush=True)

@@ -18,7 +18,7 @@ def read_queries(filename):
         return queries
 
 
-def sentences_to_terms(sentences):
+def sentences_to_terms(sentences, unigram=False):
     terms_text = []
     for sentence in sentences:
         # Rule: Bigrams and unigram
@@ -27,9 +27,11 @@ def sentences_to_terms(sentences):
         else:
             for i in range(len(sentence)-1):
                 terms_text.append(sentence[i:i+2])
-                terms_text.append(sentence[i:i+1])
-            terms_text.append(sentence[-1:])
-    # Rule: Remove duplicate bigrams. TODO: modify this to add weight with occurrence?
+                if unigram:
+                    terms_text.append(sentence[i:i+1])
+            if unigram:
+                terms_text.append(sentence[-1:])
+    # TODO: modify this to add weight with occurrence?
     return list(set(terms_text))
 
 
