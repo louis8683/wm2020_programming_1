@@ -10,6 +10,7 @@ def read_vocab(filename):
     for line in f:
         word = line.split('\n')[0]
         vocab.append(word)
+    f.close()
     return vocab
 
 
@@ -19,6 +20,7 @@ def read_docs(filename):
     for line in f:
         doc = line.split('\n')[0]
         docs.append(doc)
+    f.close()
     return docs
 
 
@@ -37,6 +39,7 @@ def read_inverted_file(filename):
             doc_id, cnt = line.split(' ')
             postings.append((int(doc_id), int(cnt)))
         inverted_file_postings.append(postings)
+    f.close()
     return inverted_file_terms, inverted_file_postings
 
 

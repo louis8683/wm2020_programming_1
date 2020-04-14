@@ -10,7 +10,7 @@ Rules are marked with 'Rule:' in the comments
 mode = 'train'
 
 if __name__ == "__main__":
-    
+    '''
     import time
     
     start_time = time.time()
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     print("seconds elaspsed: ", time.time() - start_time)
 
     # read_model.pickle_models(vocab, docs, (inverted_file_terms, inverted_file_postings), "./model/models.pickle")
-    
+    '''
 
     '''
     start_time = time.time()
@@ -290,7 +290,7 @@ if __name__ == "__main__":
             ranking[i] = ranking[i][1]
         write_rank(f, query[qp.NUMBER], ranking[:10])
 
-        break # Just for faster testing
+        # break # Just for faster testing
     
     f.close()
 
