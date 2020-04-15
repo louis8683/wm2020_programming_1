@@ -1,4 +1,3 @@
-
 ans_filename = "./queries/ans_train.csv"
 f = open(ans_filename, 'r')
 ln = f.readline()

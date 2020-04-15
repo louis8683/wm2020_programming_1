@@ -1,7 +1,9 @@
+target_query_no = 1 # index from 1
 
 ans_filename = "./queries/ans_train.csv"
 f = open(ans_filename, 'r')
-f.readline()
+for _ in range(target_query_no): # Clear irrelevant answers
+    f.readline()
 ln = f.readline()
 ln = ln.split(',')[1]
 ans_ranking = ln.split(' ')
@@ -9,7 +11,8 @@ f.close()
 
 my_filename = "./queries/my_ans_train.csv"
 f = open(my_filename, 'r')
-f.readline()
+for _ in range(target_query_no): # Clear irrelevant answers
+    f.readline()
 ln = f.readline()
 ln = ln.split(',')[1]
 my_ranking = ln.split(' ')

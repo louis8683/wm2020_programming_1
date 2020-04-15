@@ -291,22 +291,48 @@ if __name__ == "__main__":
         # ------------------------------------------------------------
         # Calculate Similarity
 
-        # Dot Product
-        postings_score = []
-        for j in range(len(merged_postings)):
-            score = 0
-            for i in range(len(terms_id)):
-                score += VS[i][j] * query_vec[i]
-            postings_score.append(score)
-        # print(postings_score)
+
+        def dot_product_similarity(VS, query_vec, merged_postings, terms_id):
+            # Dot Product
+            postings_score = []
+            for j in range(len(merged_postings)):
+                score = 0
+                for i in range(len(terms_id)):
+                    score += VS[i][j] * query_vec[i]
+                postings_score.append(score)
+            return postings_score
         
+        
+        def cosine_similarity(VS, query_vec, merged_postings, terms_id):
+            postings_score = []
+            for j in range(len(merged_postings)):
+                dot = 0
+                # Sum(w_q*w_j)
+                for i in range(len(terms_id)):
+                    dot += VS[i][j] * query_vec[i]
+                # Sum(w_q^2)*Sum(w_j^2)
+                wq_sq = 0
+                wj_sq = 0
+                for i in range(len(terms_id)):
+                    wq_sq += VS[i][j] * VS[i][j]
+                    wj_sq += query_vec[i] * query_vec[i]
+                score = dot/math.sqrt(wq_sq*wj_sq)
+
+                postings_score.append(score)
+            return postings_score
+        
+        
+        # TODO: fix the very bad result
+        postings_score = cosine_similarity(VS, query_vec, merged_postings, terms_id)
+
+
         # ------------------------------------------------------------
         # Ranking
 
         # Get Rank
         ranking = []
         for i in range(len(merged_postings)):
-            ranking.append((postings_score[i],docs[merged_postings[i]].split("/")[-1:][0]))
+            ranking.append((postings_score[i], docs[merged_postings[i]].split("/")[-1:][0]))
         
         
         # Sort ranking
@@ -316,6 +342,7 @@ if __name__ == "__main__":
             ranking[i] = ranking[i][1]
         write_rank(f, query[qp.NUMBER], ranking[:10])
 
+        
         # break # Just for faster testing
     
     f.close()
