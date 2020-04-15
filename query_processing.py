@@ -37,27 +37,27 @@ def sentences_to_terms(sentences, unigram=False):
     return list(set(terms_text))
 
 
-def terms_text_to_terms_id(vocab, terms):
+def terms_text_to_terms_id(vocab_index, terms):
     terms_id = []
     for term in terms:
         # Translate text to id in vocab.all
-        id_1 = vocab.index(term[0])
+        id_1 = vocab_index[term[0]]
         if len(term) == 1:
             id_2 = -1
         else:
-            id_2 = vocab.index(term[1])
+            id_2 = vocab_index[term[1]]
         terms_id.append((id_1,id_2))
     return terms_id
 
 
-def terms_id_to_inverted_file_index(inverted_file_terms, terms_id):
+def terms_id_to_inverted_file_index(inverted_file_terms_index, terms_id):
     inverted_indexes = []
     for term in terms_id:
         # Find inverted-file index of each term and remove the ones not in vocab.all
         try:
-            index = inverted_file_terms.index(term)
+            index = inverted_file_terms_index[term]
             inverted_indexes.append(index)
-        except ValueError:
+        except KeyError:
             print(f'no term {term}')
             terms_id.remove(term)
     return inverted_indexes
@@ -100,36 +100,47 @@ def _cosine(VS, qv, col):
     return cosine
 
 
-def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, threshold='avg'):
+def _dot(VS, qv, col):
+    dot = 0
+    # Sum(w_q*w_j)
+    for i in range(len(qv)):
+        dot += VS[i][col] * qv[i]
+    return dot
+
+
+
+def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, similarity='dot', threshold='avg'):
     '''
     Rocchio: qv' = alpha*qv + beta/|D|*sum(dv) - gamma/|D|*sum(dv)
     We consider relevant documents only
     qv' = alpha * qv + beta * sum(dv)/|D|
     
     Q: How do we define "Relevant" and "Not Relevant"?
-    - Proposed Metric: Cosine > threshold t
+    - Proposed Metric: Cosine or Dot > threshold t
     '''
     # find threshold
-    cosine = []
-    sum_cos = 0
+    similarity = []
+    sum_sim = 0
     for i in range(len(VS[0])):
-        cos = _cosine(VS, qv, i)
-        cosine.append(cos)
-        sum_cos += cos
-    avg_cos = sum_cos/len(VS[0])
+        sim = _cosine(VS, qv, i)
+        if similarity == 'dot':
+            sim = _dot(VS, qv, i)
+        similarity.append(sim)
+        sum_sim += sim
+    avg_sim = sum_sim/len(VS[0])
 
     if threshold == 'avg':
-        t = avg_cos
-        print(f"(thres={avg_cos})...", end='')
+        t = avg_sim
+        print(f"(thres={t})...", end='')
     else:
         t = threshold
-        print(f"([d]thres={avg_cos})...", end='')
+        print(f"([d]thres={t})...", end='')
     
     # Construct relevance list
     relevant = [] # True: relevant, False: not relevant
     relevant_cnt = 0
     for i in range(len(VS[0])):
-        if cosine[i] > t:
+        if similarity[i] > t:
             relevant.append(True)
             relevant_cnt += 1
         else:

@@ -23,7 +23,7 @@ def create_zeroed_2D_matrix(i, j):
     # print("using list of arrays...", end='')
     for _ in range(i):
         A.append(copy.deepcopy(row))
-    print("using list...", end='')
+    #print("using list...", end='')
     # A = numpy.array(A)
     # print("using ndarray...", end='')
     # NOTE: Test results suggests approx. same speed
@@ -72,26 +72,26 @@ def fill_matrix(VS, height, inverted_file_term_indexes, merged_postings, inverte
     # Rule: weight = tf * idf
     # tf = okapi_tf / okapi_tf_normalization 
     doc_cnt = len(docs)
+    avg_raw_tf = 0
+    max_raw_tf = 0
+    cutoff = 30
+    cnt = 0
+    cnt_over = 0
     for i in range(height):
         postings = inverted_file_postings[inverted_file_term_indexes[i]]
-
-        start_time = time.time_ns()
         for posting in postings:
             # NOTE: 1/3 of time is spent on the Okapi_norm (5s for train_query_1), Solution: precalculated doclen
-            time_nxt_post += time.time_ns() - start_time
-
-            start_time = time.time_ns()
             tf = okapi_tf(posting[1], k) / okapi_doclen_norm(posting[0], avdl, doclen, b)
-            time_tf += time.time_ns() - start_time
-
+            
             # NOTE: 2/3 of time is spent on list.index (10s for train_query_1), we use a dict to find the index
-            start_time = time.time_ns()
             iDF = idf(len(postings), doc_cnt)
             VS[i][merged[posting[0]]] = tf_idf(tf, iDF)
-            # VS[i][merged_postings.index(posting[0])] = tf_idf(tf, iDF)
-            time_tf_idf += time.time_ns() - start_time
 
-            start_time = time.time_ns()
-    
-    print(f"tf_ns:{time_tf/1000000000},idf_ns:{time_tf_idf/1000000000}, nxt_pst_ns:{time_nxt_post/1000000000}...", end='')
-            
+            avg_raw_tf += posting[1]
+            if posting[1] > max_raw_tf:
+                max_raw_tf = posting[1]
+            if posting[1] > cutoff:
+                cnt_over += 1
+            cnt += 1
+    avg_raw_tf /= cnt
+    print(f"raw tf, cnt/c_over={cnt}/{cnt_over}={cnt/cnt_over} avg:{avg_raw_tf} max:{max_raw_tf}...", end='')    

@@ -24,6 +24,11 @@ one_query_only = False
 
 avdl = 2520 # preprocessed avdl
 
+# varibles
+# Okapi
+k, b = 20, 0.9
+# Rocchio
+alpha, beta, gamma, similarity = 1, 0.8, 0.1, 'cos'
 
 if __name__ == "__main__":
     
@@ -45,6 +50,14 @@ if __name__ == "__main__":
         doclen = vsm_io.read_doclen("file-len")
     
         invf_terms, invf_postings = vsm_io.read_inverted_file("./model/inverted-file")
+    
+        vocab_index = dict()
+        for i in range(len(vocab)):
+            vocab_index[vocab[i]] = i
+
+        invf_terms_index = dict()
+        for i in range(len(invf_terms)):
+            invf_terms_index[invf_terms[i]] = i
     print(f'done. ({time.time()-start_time}sec)')
 
 
@@ -67,20 +80,21 @@ if __name__ == "__main__":
 
     queries = qp.read_queries(f"./queries/query-{mode}.xml")
 
+    cnt = 0
     for query in queries:
-
-        print("Query Title: ", query[qp.TITLE])
+        cnt += 1
+        print(f"Query Title {cnt}: ", query[qp.TITLE])
         
         start_time = time.time()
         print('Query -> Term...', end='', flush=True)
         terms_text_t = qp.sentences_to_terms(query[qp.TITLE])
         terms_text_c = qp.sentences_to_terms(query[qp.CONCEPTS])
 
-        terms_id_t = qp.terms_text_to_terms_id(vocab, terms_text_t)
-        terms_id_c = qp.terms_text_to_terms_id(vocab, terms_text_c)
+        terms_id_t = qp.terms_text_to_terms_id(vocab_index, terms_text_t)
+        terms_id_c = qp.terms_text_to_terms_id(vocab_index, terms_text_c)
 
-        invf_indexes_t = qp.terms_id_to_inverted_file_index(invf_terms, terms_id_t)
-        invf_indexes_c = qp.terms_id_to_inverted_file_index(invf_terms, terms_id_c)
+        invf_indexes_t = qp.terms_id_to_inverted_file_index(invf_terms_index, terms_id_t)
+        invf_indexes_c = qp.terms_id_to_inverted_file_index(invf_terms_index, terms_id_c)
         print(f'done. ({time.time()-start_time}sec)')
 
 
@@ -106,7 +120,7 @@ if __name__ == "__main__":
 
             start_time = time.time()
             print('Filling VS...', end='', flush=True)
-            vsm.fill_matrix(VS, len(invf_indexes), invf_indexes, merged_postings, invf_postings, docs, avdl, doclen, k=60, b=1)
+            vsm.fill_matrix(VS, len(invf_indexes), invf_indexes, merged_postings, invf_postings, docs, avdl, doclen, k=k, b=b)
             print(f'done. ({time.time()-start_time}sec)')
         
 
@@ -128,7 +142,7 @@ if __name__ == "__main__":
         # qp.weighted_title(query_vec, invf_indexes_t, invf_indexes, weight=1)
         # NOTE: Generally doesn't improve results
 
-        qp.rocchio_feedback(VS, query_vec, alpha=1, beta=0.6, gamma=0)
+        qp.rocchio_feedback(VS, query_vec, alpha=alpha, beta=beta, gamma=gamma, similarity=similarity)
         # NOTE: How can we define "relevant" docs? Now: Avg Cosine
 
         print(f'done. ({time.time()-start_time}sec)')
