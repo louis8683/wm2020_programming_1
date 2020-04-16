@@ -212,7 +212,7 @@ def _dot_roc(VS, qv, col):
     return dot
 
 
-def rocchio(VS, qv, invf_indexes, merged_postings, alpha=1, beta=0.8): #, gamma=0.1, method='cos', threshold='avg'):
+def rocchio(VS, qv, invf_indexes, merged_postings, doc_term_id, alpha=1, beta=0.8): #, gamma=0.1, method='cos', threshold='avg'):
     '''
     The REAL Rocchio Feedback (Without gamma)
 
@@ -227,16 +227,24 @@ def rocchio(VS, qv, invf_indexes, merged_postings, alpha=1, beta=0.8): #, gamma=
     import time
     lookup_time = 0
 
-    # sum(dv_r), sum(dv_n)
+    if beta == 0: # No weight
+        return
+
+    relevant_terms = set() # For Performance
+
+    # sum(dv_r)
+    print(" ")
     sum_dv_r = [0] * len(qv)
     cnt = 0
     for j in merged_postings: # for every relevant document
-        cnt += 1
-        for i in invf_indexes:
+        for i in doc_term_id[j].keys(): # For every relevant term
             start_time = time.time_ns()
-            if qv[i] > 0:
-                sum_dv_r[i] += VS.val(i,j)
+            sum_dv_r[i] += VS.val(i,j)
+            relevant_terms.add(i)
             lookup_time += time.time_ns() - start_time
+        print(f"\rLookup Time: {lookup_time/1000000000}...", end='', flush=True)
+    print(" ")
+
 
     # find |Dr|
     dr_length = len(merged_postings)
@@ -248,7 +256,26 @@ def rocchio(VS, qv, invf_indexes, merged_postings, alpha=1, beta=0.8): #, gamma=
     
     # qv' = alpha * qv + beta * sum(dv_r)/|Dr| - gamma * sum(dv_n)/|Dn|
     cnt = 0
-    for i in range(len(qv)):
+    for i in relevant_terms:
         cnt += 1
-        print(f"\rRocchio, processing doc {cnt}/{len(qv)}...", end='', flush=True)
+        print(f"\rRocchio, processing term {cnt}/{len(relevant_terms)}...", end='', flush=True)
         qv[i] = alpha * qv[i] + beta * sum_dv_r[i] / dr_length
+
+
+def expand_query(qv, cutoff=100):
+    import copy
+    rank = copy.deepcopy(qv)
+    rank.sort(reverse=True)
+    if len(rank) > 100:
+        cutoff_val = rank[100]
+    else:
+        return
+
+    invf_indexes = []
+    for i in range(len(qv)):
+        # NOTE: Need a rule on expanding query, e.g., threshold value
+        if qv[i] > cutoff_val:
+            invf_indexes.append(i)
+    print(f"new query length {len(invf_indexes)}...", end='')
+    return invf_indexes
+    

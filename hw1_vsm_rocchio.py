@@ -15,19 +15,19 @@ Rules are marked with 'Rule:' in the comments
 '''
 
 
-mode = 'train' # 'train' or 'test
+mode = 'test' # 'train' or 'test
 should_read_models = False
 should_tf_normalization = should_read_models
 should_create_vs = True
-test_ap = True
-test_map = False
+test_ap = False
+test_map = True
 one_query_only = False
 
 avdl = 2520 # preprocessed avdl
 
 # varibles
 # Okapi
-k, b = 1.2, 0.75
+k, b = 2, 1
 # Rocchio
 alpha, beta = 1, 0.8
 # Similarity
@@ -90,8 +90,8 @@ if __name__ == "__main__":
                 posting_id, tf = postings[j]
                 norm = 1 - b + b * doclen[posting_id] / avdl
                 iDF = math.log((len(docs)-len(postings)+0.5)/(len(postings)+0.5))
-                if i % 1000 == 0 and j % 1000 == 0 and tf % 3 == 0:
-                    print(f'\rTF Normalization...tf:{tf} norm:{norm} idf:{iDF} okapi:{okapi_bm25(tf, k, norm, iDF)}...', end='\n', flush=True)
+                #if i % 1000 == 0 and j % 1000 == 0 and tf % 3 == 0:
+                #    print(f'\rTF Normalization...tf:{tf} norm:{norm} idf:{iDF} okapi:{okapi_bm25(tf, k, norm, iDF)}...', end='\n', flush=True)
                 postings[j] = (posting_id, okapi_bm25(tf, k, norm, iDF))
         
         # doc:list -> term:dict -> tf:float, sorted, for faster tf finding
@@ -161,7 +161,8 @@ if __name__ == "__main__":
             # merged_invf_indexes.sort()
             print(f'done. ({time.time()-start_time}sec)')
 
-            VS = vsm.VS(invf_terms, invf_postings, docs, doclen, doc_term_id,avdl, k, b)
+            print('Creating VS Object...', end='', flush=True)
+            VS = vsm.VS(doc_term_id)
             #print('Creating Empty VS...', end='', flush=True)
             #VS = vsm.create_zeroed_2D_matrix(len(merged_invf_indexes), len(merged_postings))
             #print(f'done. ({time.time()-start_time}sec)')
@@ -191,14 +192,11 @@ if __name__ == "__main__":
 
         start_time = time.time()
         print('Rocchio...', end='', flush=True)
-        qp.rocchio(VS, query_vec, invf_indexes, merged_postings, alpha=alpha, beta=beta)
+        qp.rocchio(VS, query_vec, invf_indexes, merged_postings, doc_term_id, alpha=alpha, beta=beta)
         # NOTE: How can we define "relevant" docs? Now: Avg Cosine
         
         # Expand Query
-        invf_indexes = []
-        for i in range(len(query_vec)):
-            if query_vec[i] != 0:
-                invf_indexes.append(i)
+        invf_indexes = qp.expand_query(query_vec, cutoff=0.8)
         print(f'done. ({time.time()-start_time}sec)')
 
         
@@ -219,7 +217,7 @@ if __name__ == "__main__":
         if method == 'dot':
             sim = similarity.dot(VS, query_vec, invf_indexes, merged_postings)
         else:
-            sim = similarity.cosine(VS, query_vec, hybrid=True, power=2)
+            sim = similarity.cosine(VS, query_vec, invf_indexes, merged_postings, hybrid=True, power=2)
         print(f'done. ({time.time()-start_time}sec)')
 
 

@@ -3,7 +3,10 @@ import math
 
 def dot(VS, qv, invf_indexes, merged_postings):
     result = []
+    cnt = 0
     for j in merged_postings:
+        cnt += 1
+        # print(f"\rComparing posting {cnt}/{len(merged_postings)}...", end='')
         dot = 0
         # Sum(w_q*w_j)
         for i in invf_indexes:
