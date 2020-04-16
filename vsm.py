@@ -15,16 +15,47 @@ def get_merged_postings_list(inverted_file_postings, term_indexes):
     return merged_postings
 
 
+def get_merged_invf_indexes(merged_postings, doc_term_id):
+    # invf_indexes = []
+    invf_indexes = set()
+    cnt = 0
+    merged_postings_sorted_by_term_cnt = []
+    for posting in merged_postings:
+        merged_postings_sorted_by_term_cnt.append((len(doc_term_id[posting]), posting))
+    merged_postings_sorted_by_term_cnt.sort()
+    for posting in merged_postings_sorted_by_term_cnt:
+        posting = posting[1]
+        cnt += 1
+        print(f"\rmerged {cnt}/{len(merged_postings_sorted_by_term_cnt)} postings...", end='')
+        j = 0
+        print(f"posting terms:{len(doc_term_id[posting])}...", end='')
+        for i in range(len(doc_term_id[posting])):
+            '''
+            if i >= len(invf_indexes) or j >= len(invf_indexes) or doc_term_id[posting][i] < invf_indexes[j]:
+                invf_indexes.insert(j, doc_term_id[posting][i])
+                j += 1
+            while j < len(invf_indexes) and doc_term_id[posting][i] >= invf_indexes[j]:
+                j += 1
+            '''
+            invf_indexes.add(doc_term_id[posting][i])
+        print(f"term cnt:{len(invf_indexes)}...", end='')
+    invf_indexes = list(invf_indexes)
+    invf_indexes.sort()
+    return invf_indexes
+
+
 def create_zeroed_2D_matrix(i, j):
     import copy
     A = []
-    row = [0.0] * j
-    # row = array.array('d', row)
-    # print("using list of arrays...", end='')
-    for _ in range(i):
-        A.append(copy.deepcopy(row))
+    #row = [0.0] * j
+    #row = array.array('d', row)
+    #cnt = 0
+    #for _ in range(i):
+    #    cnt += 1
+    #    print(f"\rusing list of arrays...{cnt}/{i} rows created...", end='')
+    #    A.append(copy.deepcopy(row))
     #print("using list...", end='')
-    # A = numpy.array(A)
+    A = numpy.ndarray((i,j), dtype=float)
     # print("using ndarray...", end='')
     # NOTE: Test results suggests approx. same speed
     return A
@@ -57,11 +88,6 @@ def get_avg_doclen(postings, docs):
 
 
 def fill_matrix(VS, height, inverted_file_term_indexes, merged_postings, inverted_file_postings, docs, avdl, doclen, k=100, b=0.8):
-    
-    import time
-    time_tf = 0
-    time_tf_idf = 0
-    time_nxt_post = 0
 
     # Create a dictionary for fast index searching (merged{docID} = index of docID in merged_postings)
     merged = dict()
@@ -72,11 +98,6 @@ def fill_matrix(VS, height, inverted_file_term_indexes, merged_postings, inverte
     # Rule: weight = tf * idf
     # tf = okapi_tf / okapi_tf_normalization 
     doc_cnt = len(docs)
-    avg_raw_tf = 0
-    max_raw_tf = 0
-    cutoff = 30
-    cnt = 0
-    cnt_over = 0
     for i in range(height):
         postings = inverted_file_postings[inverted_file_term_indexes[i]]
         for posting in postings:
@@ -93,5 +114,22 @@ def fill_matrix(VS, height, inverted_file_term_indexes, merged_postings, inverte
             if posting[1] > cutoff:
                 cnt_over += 1
             cnt += 1
-    avg_raw_tf /= cnt
-    print(f"raw tf, cnt/c_over={cnt}/{cnt_over}={cnt/cnt_over} avg:{avg_raw_tf} max:{max_raw_tf}...", end='')    
+
+
+class VS:
+    def __init__(self, inverted_file_term, inverted_file_postings, docs, doclen, doc_term_id_dict, avdl, k=100, b=0.8):
+        self.invf_terms = inverted_file_term
+        self.invf_postings = inverted_file_postings
+        self.docs = docs
+        self.doclen = doclen
+        self.doc_term_id_dict = doc_term_id_dict
+        self.avdl = avdl
+        self.k = k
+        self.b = b
+    
+
+    def val(self, i, j):
+        try:
+            return self.doc_term_id_dict[j][i]
+        except KeyError:
+            return 0

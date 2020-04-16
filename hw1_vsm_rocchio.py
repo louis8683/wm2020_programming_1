@@ -16,19 +16,22 @@ Rules are marked with 'Rule:' in the comments
 
 
 mode = 'train' # 'train' or 'test
-should_read_models = True
+should_read_models = False
+should_tf_normalization = should_read_models
 should_create_vs = True
 test_ap = True
-test_map = True
+test_map = False
 one_query_only = False
 
 avdl = 2520 # preprocessed avdl
 
 # varibles
 # Okapi
-k, b = 20, 0.9
+k, b = 1.2, 0.75
 # Rocchio
-alpha, beta, gamma, method = 1, 0.2, 0.2, 'dot'
+alpha, beta = 1, 0.8
+# Similarity
+method = 'dot'
 
 if __name__ == "__main__":
     
@@ -50,17 +53,56 @@ if __name__ == "__main__":
         doclen = vsm_io.read_doclen("file-len")
     
         invf_terms, invf_postings = vsm_io.read_inverted_file("./model/inverted-file")
-
+        
+        print("Creating doc-term...", end='')
+        
         # Dicts for fast index finding
+        # term->vocab index
         vocab_index = dict()
         for i in range(len(vocab)):
             vocab_index[vocab[i]] = i
 
+        # term->invf_index
         invf_terms_index = dict()
         for i in range(len(invf_terms)):
             invf_terms_index[invf_terms[i]] = i
-    print(f'done. ({time.time()-start_time}sec)')
         
+    print(f'done. ({time.time()-start_time}sec)')
+
+    
+    '''
+    TF Normalization
+    '''
+
+
+    def okapi_bm25(tf, k, norm, idf):
+        return tf * (k+1) / (tf + k*norm) * idf
+
+    
+    if should_tf_normalization:
+        start_time = time.time()
+        print('TF Normalization...', end='', flush=True)
+        
+        for i in range(len(invf_postings)):
+            term = invf_terms[i]
+            postings = invf_postings[i]
+            for j in range(len(postings)):
+                posting_id, tf = postings[j]
+                norm = 1 - b + b * doclen[posting_id] / avdl
+                iDF = math.log((len(docs)-len(postings)+0.5)/(len(postings)+0.5))
+                if i % 1000 == 0 and j % 1000 == 0 and tf % 3 == 0:
+                    print(f'\rTF Normalization...tf:{tf} norm:{norm} idf:{iDF} okapi:{okapi_bm25(tf, k, norm, iDF)}...', end='\n', flush=True)
+                postings[j] = (posting_id, okapi_bm25(tf, k, norm, iDF))
+        
+        # doc:list -> term:dict -> tf:float, sorted, for faster tf finding
+        doc_term_id = []
+        for i in range(len(docs)):
+            doc_term_id.append(dict())
+        for i in range(len(invf_terms)):
+            for posting in invf_postings[i]:
+                doc_term_id[posting[0]][i] = posting[1]
+        
+        print(f'done. ({time.time()-start_time}sec)')
 
     '''
     Process The Query
@@ -96,6 +138,7 @@ if __name__ == "__main__":
 
         invf_indexes_t = qp.terms_id_to_inverted_file_index(invf_terms_index, terms_id_t)
         invf_indexes_c = qp.terms_id_to_inverted_file_index(invf_terms_index, terms_id_c)
+        invf_indexes = list(set(invf_indexes_t + invf_indexes_c))
         print(f'done. ({time.time()-start_time}sec)')
 
 
@@ -112,16 +155,20 @@ if __name__ == "__main__":
         
         if should_create_vs:
             start_time = time.time()
-            print('Creating Empty VS...', end='', flush=True)
-            invf_indexes = list(set(invf_indexes_t + invf_indexes_c))
+            print('Merging...', end='', flush=True)
             merged_postings = vsm.get_merged_postings_list(invf_postings, invf_indexes)
-
-            VS = vsm.create_zeroed_2D_matrix(len(invf_indexes), len(merged_postings))
+            # merged_invf_indexes = vsm.get_merged_invf_indexes(merged_postings, doc_term_id)
+            # merged_invf_indexes.sort()
             print(f'done. ({time.time()-start_time}sec)')
 
-            start_time = time.time()
-            print('Filling VS...', end='', flush=True)
-            vsm.fill_matrix(VS, len(invf_indexes), invf_indexes, merged_postings, invf_postings, docs, avdl, doclen, k=k, b=b)
+            VS = vsm.VS(invf_terms, invf_postings, docs, doclen, doc_term_id,avdl, k, b)
+            #print('Creating Empty VS...', end='', flush=True)
+            #VS = vsm.create_zeroed_2D_matrix(len(merged_invf_indexes), len(merged_postings))
+            #print(f'done. ({time.time()-start_time}sec)')
+
+            #start_time = time.time()
+            #print('Filling VS...', end='', flush=True)
+            #vsm.fill_matrix(VS, len(merged_invf_indexes), merged_invf_indexes, merged_postings, invf_postings, docs, avdl, doclen, k=k, b=b)
             print(f'done. ({time.time()-start_time}sec)')
         
 
@@ -137,15 +184,21 @@ if __name__ == "__main__":
         
         start_time = time.time()
         print('Creating the Query Vector...', end='', flush=True)
-
-        query_vec = qp.unit_vector(len(invf_indexes))
-
-        qp.weighted_title(query_vec, invf_indexes_t, invf_indexes, weight=1)
+        query_vec = qp.query_vector(invf_indexes, len(invf_terms))
+        #qp.weighted_title(query_vec, invf_indexes_t, invf_indexes, weight=1)
         # NOTE: Generally doesn't improve results
+        print(f'done. ({time.time()-start_time}sec)')
 
-        qp.rocchio_feedback(VS, query_vec, alpha=alpha, beta=beta, gamma=gamma, method=method)
+        start_time = time.time()
+        print('Rocchio...', end='', flush=True)
+        qp.rocchio(VS, query_vec, invf_indexes, merged_postings, alpha=alpha, beta=beta)
         # NOTE: How can we define "relevant" docs? Now: Avg Cosine
-
+        
+        # Expand Query
+        invf_indexes = []
+        for i in range(len(query_vec)):
+            if query_vec[i] != 0:
+                invf_indexes.append(i)
         print(f'done. ({time.time()-start_time}sec)')
 
         
@@ -163,8 +216,10 @@ if __name__ == "__main__":
         start_time = time.time()
         print('Calculating Similarity...', end='', flush=True)
         import similarity
-        # sim = similarity.cosine(VS, query_vec, hybrid=True, power=2)
-        sim = similarity.dot(VS, query_vec)
+        if method == 'dot':
+            sim = similarity.dot(VS, query_vec, invf_indexes, merged_postings)
+        else:
+            sim = similarity.cosine(VS, query_vec, hybrid=True, power=2)
         print(f'done. ({time.time()-start_time}sec)')
 
 
@@ -183,8 +238,8 @@ if __name__ == "__main__":
         rank.sort(reverse=True)
 
         # Print ranking
-        # for r in rank[:10]:
-        #    print(r)
+        for r in rank[:10]:
+            print(r)
 
         max_rank = 100
         rank = rank[:max_rank]

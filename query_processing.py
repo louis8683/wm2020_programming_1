@@ -72,6 +72,13 @@ def unit_vector(size):
     return [math.sqrt(1/size)] * size
 
 
+def query_vector(invf_indexes_rel, term_cnt):
+    print(f"rel cnt={len(invf_indexes_rel)}...", end='')
+    qv = [0] * term_cnt
+    for ind in invf_indexes_rel:
+        qv[ind] = 1
+    return qv
+
 def weighted_title(qv, title_indexes ,index_list, weight=5, mode='*'):
     for title in title_indexes:
         try:
@@ -109,7 +116,7 @@ def _dot(VS, qv, col):
 
 
 
-def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, similarity='dot', threshold='avg'):
+def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, method='dot', threshold='avg'):
     '''
     Rocchio: qv' = alpha*qv + beta/|D|*sum(dv) - gamma/|D|*sum(dv)
     We consider relevant documents only
@@ -123,7 +130,7 @@ def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, similarity='dot', t
     sum_sim = 0
     for i in range(len(VS[0])):
         sim = _cosine(VS, qv, i)
-        if similarity == 'dot':
+        if method == 'dot':
             sim = _dot(VS, qv, i)
         similarity.append(sim)
         sum_sim += sim
@@ -179,3 +186,69 @@ def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, similarity='dot', t
     # qv' = alpha * qv + beta * sum(dv_r)/|Dr| - gamma * sum(dv_n)/|Dn|
     for i in range(len(qv)):
         qv[i] = alpha*qv[i] + beta * sum_dv_r[i] / dr_length - gamma * sum_dv_n[i] / dn_length
+
+
+# -------------------------------
+def _cosine_roc(VS, qv, col):
+    j = col
+    dot = _dot_roc(VS, qv, j)
+    cosine = 0
+    # Sum(w_q^2)*Sum(w_j^2)
+    wq_sq = 0
+    wj_sq = 0
+    for i in range(len(qv)):
+        wq_sq += float(VS.val(i, j)) * float(VS.val(i, j))
+        wj_sq += qv[i] * qv[i]
+    cosine = dot/math.sqrt(wq_sq*wj_sq)
+    return cosine
+
+
+def _dot_roc(VS, qv, col):
+    j = col
+    dot = 0
+    # Sum(w_q*w_j)
+    for i in range(len(qv)):
+        dot += VS.val(i, j) * qv[i]
+    return dot
+
+
+def rocchio(VS, qv, invf_indexes, merged_postings, alpha=1, beta=0.8): #, gamma=0.1, method='cos', threshold='avg'):
+    '''
+    The REAL Rocchio Feedback (Without gamma)
+
+    Rocchio: qv' = alpha*qv + beta/|D|*sum(dv) - gamma/|D|*sum(dv)
+    We consider relevant documents only
+    qv' = alpha * qv + beta * sum(dv)/|D|
+    
+    Q: How do we define "Relevant" and "Not Relevant"?
+    - Proposed Metric: Cosine or Dot > threshold t
+    '''
+    
+    import time
+    lookup_time = 0
+
+    # sum(dv_r), sum(dv_n)
+    sum_dv_r = [0] * len(qv)
+    cnt = 0
+    for j in merged_postings: # for every relevant document
+        cnt += 1
+        for i in invf_indexes:
+            start_time = time.time_ns()
+            if qv[i] > 0:
+                sum_dv_r[i] += VS.val(i,j)
+            lookup_time += time.time_ns() - start_time
+
+    # find |Dr|
+    dr_length = len(merged_postings)
+
+    # Exceptions with division 0
+    if dr_length == 0:
+        beta, dr_length = 0, 1
+        print("(Rocchio: No Relevant Documents)...", end='')
+    
+    # qv' = alpha * qv + beta * sum(dv_r)/|Dr| - gamma * sum(dv_n)/|Dn|
+    cnt = 0
+    for i in range(len(qv)):
+        cnt += 1
+        print(f"\rRocchio, processing doc {cnt}/{len(qv)}...", end='', flush=True)
+        qv[i] = alpha * qv[i] + beta * sum_dv_r[i] / dr_length
