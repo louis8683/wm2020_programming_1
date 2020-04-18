@@ -2,8 +2,34 @@ import math
 import pathlib
 import os
 import array
-
 import numpy
+
+
+def tf_normalization(invf_postings, invf_terms, docs, doclen, avdl, k, b):
+    for i in range(len(invf_postings)):
+        term = invf_terms[i]
+        postings = invf_postings[i]
+        for j in range(len(postings)):
+            posting_id, tf = postings[j]
+            norm = 1 - b + b * doclen[posting_id] / avdl
+            iDF = math.log((len(docs)-len(postings)+0.5)/(len(postings)+0.5))
+            postings[j] = (posting_id, okapi_bm25(tf, k, norm, iDF))
+
+
+def okapi_bm25(tf, k, norm, idf):
+        return tf * (k+1) / (tf + k*norm) * idf
+
+
+def create_doc_term_id(docs, invf_terms, invf_postings):
+    # doc:list -> term:dict -> tf:float, sorted, for faster tf finding
+    doc_term_id = []
+    for i in range(len(docs)):
+        doc_term_id.append(dict())
+    for i in range(len(invf_terms)):
+        for posting in invf_postings[i]:
+            doc_term_id[posting[0]][i] = posting[1]
+    return doc_term_id
+
 
 def get_merged_postings_list(inverted_file_postings, term_indexes):
     merged_postings = set()

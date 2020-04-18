@@ -68,148 +68,12 @@ Functions for the Query Vector
 '''
 
 
-def unit_vector(size):
-    return [math.sqrt(1/size)] * size
-
-
 def query_vector(invf_indexes_rel, term_cnt):
     print(f"rel cnt={len(invf_indexes_rel)}...", end='')
     qv = [0] * term_cnt
     for ind in invf_indexes_rel:
         qv[ind] = 1
     return qv
-
-def weighted_title(qv, title_indexes ,index_list, weight=5, mode='*'):
-    for title in title_indexes:
-        try:
-            i = index_list.index(title)
-            if mode == '*':
-                qv[i] *= weight
-            elif mode == '+':
-                qv[i] += weight
-        except ValueError:
-            pass
-
-
-def _cosine(VS, qv, col):
-    dot = 0
-    cosine = 0
-    # Sum(w_q*w_j)
-    for i in range(len(qv)):
-        dot += float(VS[i][col]) * qv[i]
-    # Sum(w_q^2)*Sum(w_j^2)
-    wq_sq = 0
-    wj_sq = 0
-    for i in range(len(qv)):
-        wq_sq += float(VS[i][col]) * float(VS[i][col])
-        wj_sq += qv[i] * qv[i]
-    cosine = dot/math.sqrt(wq_sq*wj_sq)
-    return cosine
-
-
-def _dot(VS, qv, col):
-    dot = 0
-    # Sum(w_q*w_j)
-    for i in range(len(qv)):
-        dot += VS[i][col] * qv[i]
-    return dot
-
-
-
-def rocchio_feedback(VS, qv, alpha=0.8, beta=0.2, gamma=0.2, method='dot', threshold='avg'):
-    '''
-    Rocchio: qv' = alpha*qv + beta/|D|*sum(dv) - gamma/|D|*sum(dv)
-    We consider relevant documents only
-    qv' = alpha * qv + beta * sum(dv)/|D|
-    
-    Q: How do we define "Relevant" and "Not Relevant"?
-    - Proposed Metric: Cosine or Dot > threshold t
-    '''
-    # find threshold
-    similarity = []
-    sum_sim = 0
-    for i in range(len(VS[0])):
-        sim = _cosine(VS, qv, i)
-        if method == 'dot':
-            sim = _dot(VS, qv, i)
-        similarity.append(sim)
-        sum_sim += sim
-    avg_sim = sum_sim/len(VS[0])
-
-    if threshold == 'avg':
-        t = avg_sim
-        print(f"(thres={t})...", end='')
-    else:
-        t = threshold
-        print(f"([d]thres={t})...", end='')
-    
-    # Construct relevance list
-    relevant = [] # True: relevant, False: not relevant
-    relevant_cnt = 0
-    for i in range(len(VS[0])):
-        if similarity[i] > t:
-            relevant.append(True)
-            relevant_cnt += 1
-        else:
-            relevant.append(False)
-    
-    # sum(dv_r), sum(dv_n)
-    sum_dv_r = [0] * len(qv)
-    sum_dv_n = [0] * len(qv)
-    for j in range(len(VS[0])): # for every relevant document
-        if relevant[j]:
-            for i in range(len(qv)):
-                sum_dv_r[i] += VS[i][j]
-        else:  
-            for i in range(len(qv)):
-                sum_dv_n[i] += VS[i][j]
-    
-    # find |Dr|
-    dr_length = 0
-    for i in range(len(sum_dv_r)):
-        dr_length += sum_dv_r[i] * sum_dv_r[i]
-    dr_length = math.sqrt(dr_length)
-    # find |Dn|
-    dn_length = 0
-    for i in range(len(sum_dv_n)):
-        dn_length += sum_dv_n[i] * sum_dv_n[i]
-    dn_length = math.sqrt(dn_length)
-
-    # Exceptions with division 0
-    if dr_length == 0:
-        beta, dr_length = 0, 1
-        print("(Rocchio: No Relevant Documents)...", end='')
-    if dn_length == 0:
-        gamma, dn_length = 0, 1
-        print("(Rocchio: No Non-Relevant Documents)...", end='')
-    
-    # qv' = alpha * qv + beta * sum(dv_r)/|Dr| - gamma * sum(dv_n)/|Dn|
-    for i in range(len(qv)):
-        qv[i] = alpha*qv[i] + beta * sum_dv_r[i] / dr_length - gamma * sum_dv_n[i] / dn_length
-
-
-# -------------------------------
-def _cosine_roc(VS, qv, col):
-    j = col
-    dot = _dot_roc(VS, qv, j)
-    cosine = 0
-    # Sum(w_q^2)*Sum(w_j^2)
-    wq_sq = 0
-    wj_sq = 0
-    for i in range(len(qv)):
-        wq_sq += float(VS.val(i, j)) * float(VS.val(i, j))
-        wj_sq += qv[i] * qv[i]
-    cosine = dot/math.sqrt(wq_sq*wj_sq)
-    return cosine
-
-
-def _dot_roc(VS, qv, col):
-    j = col
-    dot = 0
-    # Sum(w_q*w_j)
-    for i in range(len(qv)):
-        dot += VS.val(i, j) * qv[i]
-    return dot
 
 
 def rocchio(VS, qv, invf_indexes, merged_postings, doc_term_id, alpha=1, beta=0.8): #, gamma=0.1, method='cos', threshold='avg'):
@@ -266,8 +130,8 @@ def expand_query(qv, cutoff=100):
     import copy
     rank = copy.deepcopy(qv)
     rank.sort(reverse=True)
-    if len(rank) > 100:
-        cutoff_val = rank[100]
+    if len(rank) > cutoff:
+        cutoff_val = rank[cutoff]
     else:
         return
 

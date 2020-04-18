@@ -1,6 +1,28 @@
 import numpy as np
 
 
+def parse_sys_arguments(argv):
+    rel_on, input_query_filename, output_ranked_filename, model_dir, ntcir_dir = None, None, None, None, None
+    last = None
+    for s in argv[1:]:
+        if last == None:
+            if s == '-r':
+                rel_on = True
+            else:
+                last = s
+        else:
+            if last == '-i':
+                input_query_filename = s
+            elif last == '-o':
+                output_ranked_filename = s
+            elif last == '-m':
+                model_dir = s
+            elif last == '-d':
+                ntcir_dir = s
+            last = None
+    return rel_on, input_query_filename, output_ranked_filename, model_dir, ntcir_dir
+
+
 def read_vocab(filename):
     import codecs
     ''' Remember to open file f with the right encoding'''

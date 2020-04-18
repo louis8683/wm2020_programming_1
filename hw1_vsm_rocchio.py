@@ -1,7 +1,8 @@
 import math
 import copy
 import time
-import array
+import sys
+import pathlib
 
 import numpy
 
@@ -15,13 +16,14 @@ Rules are marked with 'Rule:' in the comments
 '''
 
 
-mode = 'test' # 'train' or 'test
+mode = 'train' # 'train' or 'test
+use_sys_arguments = False
 should_read_models = False
 should_tf_normalization = should_read_models
-should_create_vs = True
-test_ap = False
-test_map = True
+should_do_rocchio = True
 one_query_only = False
+test_ap = one_query_only
+test_map = not test_ap
 
 avdl = 2520 # preprocessed avdl
 
@@ -30,11 +32,38 @@ avdl = 2520 # preprocessed avdl
 k, b = 2, 1
 # Rocchio
 alpha, beta = 1, 0.8
+num_relevant_docs = 1000
+num_expanded_terms = 5000
 # Similarity
 method = 'dot'
 
 if __name__ == "__main__":
-    
+
+
+    '''
+    Parse Command Line Arguments
+
+    - "-r": If specified, turn on the relevance feedback
+    - "-i query-file": The input query file
+    - "-o ranked-list": The output ranked list file
+    - "-m model-dir": The input model directory (includes three model files)
+    - "-d NTCIR-dir": The directory of NTCIR documents
+    '''
+
+
+    if use_sys_arguments:
+        rel_on, input_query_filename, output_ranked_filename, model_dir, ntcir_dir = vsm_io.parse_sys_arguments(sys.argv)
+        this_program_file_dir = str(pathlib.Path(__file__).parent.absolute())
+        print("Program Directory: ", this_program_file_dir)
+    else:
+        rel_on = should_do_rocchio
+        input_query_filename = f"./queries/query-{mode}.xml"
+        output_ranked_filename = f"./queries/my_ans_{mode}.csv"
+        model_dir = "./model"
+        ntcir_dir = "./CIRB010"
+        this_program_file_dir = "./"
+
+
     '''
     Read in the models.
 
@@ -43,16 +72,17 @@ if __name__ == "__main__":
     - Read Inverted File (inverted-file) into two lists, one for 'terms' and one for 'postings'
     '''
 
+
     start_time = time.time()
     print('Reading models...', end='', flush=True)
     if should_read_models:
-        vocab = vsm_io.read_vocab("./model/vocab.all")
+        vocab = vsm_io.read_vocab(model_dir + "/vocab.all")
 
-        docs = vsm_io.read_docs("./model/file-list")
+        docs = vsm_io.read_docs(model_dir + "/file-list")
 
-        doclen = vsm_io.read_doclen("file-len")
+        doclen = vsm_io.read_doclen(this_program_file_dir + "/file-len")
     
-        invf_terms, invf_postings = vsm_io.read_inverted_file("./model/inverted-file")
+        invf_terms, invf_postings = vsm_io.read_inverted_file(model_dir + "/inverted-file")
         
         print("Creating doc-term...", end='')
         
@@ -69,40 +99,19 @@ if __name__ == "__main__":
         
     print(f'done. ({time.time()-start_time}sec)')
 
-    
+
     '''
     TF Normalization
     '''
 
 
-    def okapi_bm25(tf, k, norm, idf):
-        return tf * (k+1) / (tf + k*norm) * idf
-
-    
     if should_tf_normalization:
         start_time = time.time()
         print('TF Normalization...', end='', flush=True)
-        
-        for i in range(len(invf_postings)):
-            term = invf_terms[i]
-            postings = invf_postings[i]
-            for j in range(len(postings)):
-                posting_id, tf = postings[j]
-                norm = 1 - b + b * doclen[posting_id] / avdl
-                iDF = math.log((len(docs)-len(postings)+0.5)/(len(postings)+0.5))
-                #if i % 1000 == 0 and j % 1000 == 0 and tf % 3 == 0:
-                #    print(f'\rTF Normalization...tf:{tf} norm:{norm} idf:{iDF} okapi:{okapi_bm25(tf, k, norm, iDF)}...', end='\n', flush=True)
-                postings[j] = (posting_id, okapi_bm25(tf, k, norm, iDF))
-        
-        # doc:list -> term:dict -> tf:float, sorted, for faster tf finding
-        doc_term_id = []
-        for i in range(len(docs)):
-            doc_term_id.append(dict())
-        for i in range(len(invf_terms)):
-            for posting in invf_postings[i]:
-                doc_term_id[posting[0]][i] = posting[1]
-        
+        vsm.tf_normalization(invf_postings, invf_terms, docs, doclen, avdl, k, b)        
+        doc_term_id = vsm.create_doc_term_id(docs, invf_terms, invf_postings)
         print(f'done. ({time.time()-start_time}sec)')
+
 
     '''
     Process The Query
@@ -118,10 +127,10 @@ if __name__ == "__main__":
 
 
     # Open the file for writing ranks    
-    f = open(f"./queries/my_ans_{mode}.csv", "w")
+    f = open(output_ranked_filename, "w")
     f.write("query_id,retrieved_docs\n")
 
-    queries = qp.read_queries(f"./queries/query-{mode}.xml")
+    queries = qp.read_queries(input_query_filename)
 
     cnt = 0
     for query in queries:
@@ -153,25 +162,14 @@ if __name__ == "__main__":
         '''
 
         
-        if should_create_vs:
-            start_time = time.time()
-            print('Merging...', end='', flush=True)
-            merged_postings = vsm.get_merged_postings_list(invf_postings, invf_indexes)
-            # merged_invf_indexes = vsm.get_merged_invf_indexes(merged_postings, doc_term_id)
-            # merged_invf_indexes.sort()
-            print(f'done. ({time.time()-start_time}sec)')
+        start_time = time.time()
+        print('Merging...', end='', flush=True)
+        merged_postings = vsm.get_merged_postings_list(invf_postings, invf_indexes)
+        print(f'done. ({time.time()-start_time}sec)')
 
-            print('Creating VS Object...', end='', flush=True)
-            VS = vsm.VS(doc_term_id)
-            #print('Creating Empty VS...', end='', flush=True)
-            #VS = vsm.create_zeroed_2D_matrix(len(merged_invf_indexes), len(merged_postings))
-            #print(f'done. ({time.time()-start_time}sec)')
-
-            #start_time = time.time()
-            #print('Filling VS...', end='', flush=True)
-            #vsm.fill_matrix(VS, len(merged_invf_indexes), merged_invf_indexes, merged_postings, invf_postings, docs, avdl, doclen, k=k, b=b)
-            print(f'done. ({time.time()-start_time}sec)')
-        
+        print('Creating VS Object...', end='', flush=True)
+        VS = vsm.VS(doc_term_id)
+        print(f'done. ({time.time()-start_time}sec)')
 
 
         '''
@@ -186,18 +184,33 @@ if __name__ == "__main__":
         start_time = time.time()
         print('Creating the Query Vector...', end='', flush=True)
         query_vec = qp.query_vector(invf_indexes, len(invf_terms))
-        #qp.weighted_title(query_vec, invf_indexes_t, invf_indexes, weight=1)
-        # NOTE: Generally doesn't improve results
         print(f'done. ({time.time()-start_time}sec)')
 
-        start_time = time.time()
-        print('Rocchio...', end='', flush=True)
-        qp.rocchio(VS, query_vec, invf_indexes, merged_postings, doc_term_id, alpha=alpha, beta=beta)
-        # NOTE: How can we define "relevant" docs? Now: Avg Cosine
-        
-        # Expand Query
-        invf_indexes = qp.expand_query(query_vec, cutoff=0.8)
-        print(f'done. ({time.time()-start_time}sec)')
+        if should_do_rocchio:
+            # Select Relevant Documents
+            relevant_postings = []
+            # Similarity
+            if method == 'dot':
+                sim = similarity.dot(VS, query_vec, invf_indexes, merged_postings)
+            else:
+                sim = similarity.cosine(VS, query_vec, invf_indexes, merged_postings, hybrid=True, power=2)
+            # Ranking
+            rank = []
+            for i in range(len(sim)):
+                rank.append((sim[i], merged_postings[i]))
+            rank.sort(reverse=True)
+            if num_relevant_docs > len(rank):
+                num_relevant_docs = len(rank)
+            for i in range(num_relevant_docs):
+                relevant_postings.append(rank[i][1])
+
+            start_time = time.time()
+            print('Rocchio...', end='', flush=True)
+            qp.rocchio(VS, query_vec, invf_indexes, relevant_postings, doc_term_id, alpha=alpha, beta=beta)
+            
+            # Expand Query
+            invf_indexes = qp.expand_query(query_vec, cutoff=num_expanded_terms)
+            print(f'done. ({time.time()-start_time}sec)')
 
         
         '''
@@ -210,6 +223,7 @@ if __name__ == "__main__":
             * Hybrid? (Dot + Cosine)
         - Calculate Every sim(qv,D) and store results
         '''
+
 
         start_time = time.time()
         print('Calculating Similarity...', end='', flush=True)
@@ -229,6 +243,7 @@ if __name__ == "__main__":
             - Sort
         - Extract the 100 most relevant docs
         '''
+
 
         rank = []
         for i in range(len(sim)):
@@ -253,20 +268,11 @@ if __name__ == "__main__":
     
     f.close()
 
-    if test_ap:
-        print("Average Precision")
-        exec(open("average_precision.py").read())    
+    if not use_sys_arguments:
+        if test_ap:
+            print("Average Precision")
+            exec(open(this_program_file_dir + "/average_precision.py").read())    
 
-    if test_map:
-        print("Mean Average Precision")
-        exec(open("mean_average_precision.py").read())    
-
-
-
-
-
-
-
-
-
-
+        if test_map:
+            print("Mean Average Precision")
+            exec(open(this_program_file_dir + "/mean_average_precision.py").read())    

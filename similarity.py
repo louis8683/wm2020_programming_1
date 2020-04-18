@@ -40,15 +40,3 @@ def cosine(VS, qv, invf_indexes, merged_postings, hybrid=False, power=2):
         cosine = dot/math.sqrt(wq_sq*wj_sq)
         result.append(cosine)
     return result
-
-
-def euclidean(VS, qv):
-    result = []
-    for j in range(len(VS[0])):
-        euclidean = 0
-        # Sum((w_q-w_j)^2)
-        for j in range(len(qv)):
-            euclidean += (VS[i][j] - qv[i]) * (VS[i][j] - qv[i])
-        euclidean = math.sqrt(euclidean)
-        result.append(euclidean)
-    return result
