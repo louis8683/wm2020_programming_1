@@ -7,6 +7,8 @@ import pathlib
 import numpy
 
 import query_processing as qp
+import similarity
+
 import vsm
 import vsm_io
 
@@ -18,7 +20,7 @@ Rules are marked with 'Rule:' in the comments
 
 mode = 'train' # 'train' or 'test
 use_sys_arguments = False
-should_read_models = False
+should_read_models = True
 should_tf_normalization = should_read_models
 should_do_rocchio = True
 one_query_only = False
@@ -32,8 +34,8 @@ avdl = 2520 # preprocessed avdl
 k, b = 2, 1
 # Rocchio
 alpha, beta = 1, 0.8
-num_relevant_docs = 1000
-num_expanded_terms = 5000
+num_relevant_docs = 10000
+num_expanded_terms = 100
 # Similarity
 method = 'dot'
 
@@ -227,7 +229,6 @@ if __name__ == "__main__":
 
         start_time = time.time()
         print('Calculating Similarity...', end='', flush=True)
-        import similarity
         if method == 'dot':
             sim = similarity.dot(VS, query_vec, invf_indexes, merged_postings)
         else:

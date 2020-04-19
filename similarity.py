@@ -6,6 +6,7 @@ def dot(VS, qv, invf_indexes, merged_postings):
     cnt = 0
     for j in merged_postings:
         cnt += 1
+        print(f"\rSimilarity: Dot product {cnt}/{len(merged_postings)}...", end='')
         # print(f"\rComparing posting {cnt}/{len(merged_postings)}...", end='')
         dot = 0
         # Sum(w_q*w_j)
